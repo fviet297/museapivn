@@ -2,7 +2,7 @@
  * Run: node tests/test_admin_api_error_messages.mjs
  *
  * Behavioral test for the admin.html fetch helper (api()):
- * non-JSON error responses must surface a clear Chinese HTTP-status hint,
+ * non-JSON error responses must surface a clear Vietnamese HTTP-status hint,
  * never raw HTML source; JSON detail/message/error handling and success
  * passthrough must stay unchanged. No external dependencies.
  */
@@ -45,11 +45,11 @@ const cloudflareHtml =
   "<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head><body>" +
   "<center>cloudflare</center> lots of markup ... aa</body></html>";
 
-await run("502 Cloudflare HTML -> neutral Chinese hint, no HTML leak, no nginx claim", async () => {
+await run("502 Cloudflare HTML -> neutral Vietnamese hint, no HTML leak, no nginx claim", async () => {
   const api = makeApi({ status: 502, text: cloudflareHtml });
   await assert.rejects(() => api("/admin/accounts/1/quota", { method: "POST" }), (e) => {
     const m = e.message;
-    assert.match(m, /服务返回网关错误 \(HTTP 502\)/);
+    assert.match(m, /Dịch vụ trả về lỗi gateway \(HTTP 502\)/);
     assert.ok(!m.includes("<"), "must not leak HTML source");
     assert.ok(!/Nginx|nginx/i.test(m), "must not hard-code Nginx");
     return true;
@@ -59,17 +59,17 @@ await run("502 Cloudflare HTML -> neutral Chinese hint, no HTML leak, no nginx c
 await run("502 nginx HTML -> same neutral 502 hint, no timeout claim", async () => {
   const api = makeApi({ status: 502, text: "<html><h1>502 Bad Gateway</h1></html>" });
   await assert.rejects(() => api("/admin/accounts"), (e) => {
-    assert.match(e.message, /服务返回网关错误 \(HTTP 502\)/);
-    assert.ok(!/timeout|超时/.test(e.message), "must not claim Nginx timeout for every 502");
+    assert.match(e.message, /Dịch vụ trả về lỗi gateway \(HTTP 502\)/);
+    assert.ok(!/timeout|quá thời gian/i.test(e.message), "must not claim Nginx timeout for every 502");
     return true;
   });
 });
 
 for (const [status, snippet] of [
-  [503, "服务暂时不可用"],
-  [504, "网关超时"],
-  [500, "服务端内部错误"],
-  [429, "请求过于频繁"],
+  [503, "Dịch vụ tạm thời không khả dụng"],
+  [504, "Gateway quá thời gian"],
+  [500, "Lỗi nội bộ máy chủ"],
+  [429, "Yêu cầu quá thường xuyên"],
 ]) {
   await run(status + " non-JSON -> status hint", async () => {
     const api = makeApi({ status, text: "<html></html>" });
@@ -98,7 +98,7 @@ await run("JSON error.message and error object still handled", async () => {
 
 await run("401 branch unchanged", async () => {
   const api = makeApi({ status: 401, text: '{"detail":"Unauthorized"}' });
-  await assert.rejects(() => api("/admin/accounts"), (e) => e.message === "API Key 未填写或填写错误");
+  await assert.rejects(() => api("/admin/accounts"), (e) => e.message === "API Key chưa được nhập hoặc nhập sai");
 });
 
 await run("success response passthrough unchanged", async () => {
