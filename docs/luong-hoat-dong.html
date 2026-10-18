@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vì sao chỉ cần cookie là gọi được API</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --bg-soft:#101a2e;
+    --panel:#111c33;
+    --panel-2:#0a1222;
+    --line:#23344f;
+    --line-soft:#1a2740;
+    --text:#e9effc;
+    --muted:#93a5c4;
+    --accent:#38bdf8;
+    --accent-2:#a78bfa;
+    --ok:#34d399;
+    --warn:#fbbf24;
+    --shadow:0 18px 44px rgba(0,0,0,.45);
+    --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1100px 560px at 50% -12%, #172744, var(--bg));
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    line-height:1.55;
+    padding:28px 16px 64px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  header h1{font-size:clamp(22px,3vw,34px);margin:0 0 8px;letter-spacing:.2px}
+  header p{margin:0;color:var(--muted);max-width:78ch;font-size:15px}
+  header .pill{display:inline-block;margin-bottom:10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);border:1px solid #2a4868;background:#0e1b2e;border-radius:999px;padding:3px 10px}
+
+  .stage{
+    position:relative;
+    margin-top:22px;
+    background:linear-gradient(180deg,#0e1729,#0b1222);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:22px;
+    overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  #wires{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .wire{stroke:#223350;stroke-width:1.6;fill:none;transition:stroke .3s,stroke-width .3s,opacity .3s}
+  .wire.active{stroke:var(--accent);stroke-width:2.6;filter:drop-shadow(0 0 7px rgba(56,189,248,.55))}
+  .wire.dim{opacity:.35}
+  #packet{transition:opacity .2s}
+
+  .grid{
+    position:relative;z-index:1;
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    grid-template-areas:
+      "client server browser muse"
+      ".      pool   .       .";
+    column-gap:clamp(64px,9vw,110px);
+    row-gap:88px;
+  }
+  @media (max-width:900px){
+    .grid{
+      grid-template-columns:1fr;
+      grid-template-areas:
+        "client"
+        "server"
+        "pool"
+        "browser"
+        "muse";
+      gap:56px;
+    }
+  }
+
+  .node{
+    min-width:0;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px 13px;
+    box-shadow:var(--shadow);
+    transition:border-color .35s,box-shadow .35s,transform .35s,background .35s;
+  }
+  .node.active{
+    border-color:var(--accent);
+    background:#12223c;
+    box-shadow:0 0 0 1px var(--accent),0 14px 34px rgba(56,189,248,.22);
+    transform:translateY(-2px);
+  }
+  .node .tag{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+  .node h3{margin:3px 0 6px;font-size:13.5px;line-height:1.3}
+  .node > p{margin:0;font-size:11.5px;color:var(--muted)}
+  .node.active .tag{color:var(--accent)}
+
+  .cookie-card{
+    margin:7px 0;
+    border:1px dashed #3a5177;
+    border-radius:9px;
+    padding:6px 8px;
+    background:#0c1526;
+    font:10px/1.5 var(--mono);
+    color:#9fb3d4;
+  }
+
+  .browser{
+    margin-top:8px;
+    border:1px solid #2b3d5f;
+    border-radius:10px;
+    background:#0a1222;
+    overflow:hidden;
+  }
+  .browser .bar{
+    display:flex;align-items:center;gap:5px;
+    padding:5px 7px;background:#0f1a2e;border-bottom:1px solid #1d2c46;
+  }
+  .browser .bar i{width:6px;height:6px;border-radius:50%;background:#334b70;display:inline-block}
+  .browser .url{
+    font:10px/1.2 var(--mono);color:#7f94b6;margin-left:4px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    transition:color .35s;
+  }
+  .browser .url.ok{color:#7ef0c0}
+  .chat{padding:8px;display:flex;flex-direction:column;gap:6px;min-height:86px}
+  .bubble{
+    font-size:10.5px;border-radius:9px;padding:6px 8px;max-width:92%;
+    opacity:0;transform:translateY(5px);
+    transition:opacity .4s ease,transform .4s ease;
+  }
+  .bubble.show{opacity:1;transform:none}
+  .bubble.user{align-self:flex-end;background:#1d3a63;color:#dbeafe}
+  .bubble.ai{align-self:flex-start;background:#16342a;color:#d1fae5}
+
+  .narration{
+    margin-top:18px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:18px;
+    box-shadow:var(--shadow);
+  }
+  .nrow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .count{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  .dots{display:flex;gap:7px}
+  .dots button{
+    width:9px;height:9px;padding:0;border-radius:50%;border:1px solid #33507a;
+    background:transparent;cursor:pointer;transition:background .25s,transform .25s;
+  }
+  .dots button.on{background:var(--accent);border-color:var(--accent);transform:scale(1.25)}
+  .narration h2{font-size:17px;margin:8px 0 8px;line-height:1.35}
+  .narration p{margin:0;font-size:13.5px;color:#c6d3e9;min-height:78px}
+  .narration pre{
+    margin:12px 0 4px;
+    background:var(--panel-2);
+    border:1px solid var(--line-soft);
+    border-radius:10px;
+    padding:11px 12px;
+    font:11px/1.55 var(--mono);
+    color:#a9c1e8;
+    overflow:auto;
+    white-space:pre-wrap;
+    word-break:break-word;
+    min-height:78px;
+  }
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .controls button{
+    font:inherit;font-size:12.5px;
+    padding:7px 13px;border-radius:9px;cursor:pointer;
+    border:1px solid #2f4668;background:#101d33;color:#cfe0f7;
+    transition:border-color .2s,background .2s,color .2s;
+  }
+  .controls button:hover{border-color:var(--accent);color:#fff}
+  .controls button.primary{background:linear-gradient(135deg,#0284c7,#2563eb);border-color:#2b6fd4;color:#fff;font-weight:600}
+  .progress{height:4px;background:#16233a;border-radius:99px;overflow:hidden;margin-top:14px}
+  #bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .3s linear}
+
+  .callout{
+    margin-top:26px;
+    border:1px solid #2a4868;
+    background:linear-gradient(135deg,#0f2036,#101a2e);
+    border-radius:16px;padding:18px 20px;
+  }
+  .callout b{color:var(--accent)}
+  .callout p{margin:0;font-size:15px;color:#d7e3f7}
+
+  .why{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:16px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:16px;box-shadow:var(--shadow);
+  }
+  .card h3{margin:0 0 7px;font-size:14.5px;color:#fff}
+  .card p{margin:0;font-size:13px;color:var(--muted)}
+  .card code{font:11.5px var(--mono);background:#0a1222;border:1px solid var(--line-soft);border-radius:5px;padding:1px 5px;color:#a9c1e8}
+
+  .section-title{margin:30px 0 4px;font-size:18px}
+  .section-sub{margin:0 0 12px;color:var(--muted);font-size:13.5px}
+
+  .nots{
+    margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:10px 18px;padding:0;list-style:none;
+  }
+  .nots li{position:relative;padding-left:20px;font-size:13px;color:#c6d3e9}
+  .nots li::before{content:"";position:absolute;left:2px;top:7px;width:7px;height:7px;border-radius:2px;background:var(--warn)}
+
+  .snippet{
+    margin:14px 0 0;
+    background:var(--panel-2);
+    border:1px solid var(--line-soft);
+    border-radius:12px;
+    padding:12px 14px;
+    font:11.5px/1.65 var(--mono);
+    color:#a9c1e8;
+    overflow:auto;
+    white-space:pre-wrap;
+  }
+  .hint{margin:8px 0 0;color:var(--muted);font-size:12.5px}
+  .card code,.hint code,.section-sub code{
+    font:11.5px var(--mono);background:#0a1222;border:1px solid var(--line-soft);
+    border-radius:5px;padding:1px 5px;color:#a9c1e8;overflow-wrap:anywhere;
+  }
+
+  .split{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:14px;margin-top:16px;
+  }
+  .steps{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:13px}
+  .steps li{margin-bottom:10px}
+  .steps li::marker{color:var(--accent);font-weight:700}
+  .steps b{color:#dbe7fa}
+
+  .diagram{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin:14px 0 10px;padding:12px;
+    border:1px solid var(--line-soft);border-radius:12px;background:var(--panel-2);
+  }
+  .dbox{
+    font-size:11.5px;padding:7px 9px;border-radius:8px;
+    border:1px solid #2f4668;background:#101d33;color:#cfe0f7;white-space:nowrap;
+  }
+  .dbox.accent{border-color:var(--accent);color:#fff;box-shadow:0 0 0 1px rgba(56,189,248,.35)}
+  .dlink{
+    flex:1;min-width:96px;text-align:center;font-size:10px;color:var(--muted);
+    position:relative;padding-top:15px;
+  }
+  .dlink::before{
+    content:"";position:absolute;top:5px;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  }
+  .dlink span{display:inline-block;background:var(--panel-2);padding:0 5px}
+  .dlink code{font:9.5px var(--mono);color:#9fb3d4}
+
+  footer{margin-top:34px;color:#6f83a4;font-size:11.5px;text-align:center}
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none!important;animation:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="pill">Giải thích trực quan</span>
+    <h1>Vì sao chỉ cần cookie là gọi được API?</h1>
+    <p>muse.ai không có API công khai. muse2api không gọi vào một API bí mật — nó mở một trình duyệt thật, mang cookie đăng nhập của bạn, thao tác trên giao diện, rồi dịch kết quả sang định dạng OpenAI. Dưới đây là luồng đó, từng bước.</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg id="wires" aria-hidden="true">
+      <g id="packet" style="opacity:0">
+        <rect x="-29" y="-11" width="58" height="22" rx="11"
+              fill="#38bdf8" stroke="#0b1020" stroke-width="1.5"></rect>
+        <text id="packet-label" y="3.6" text-anchor="middle" font-size="10" font-weight="700"
+              fill="#04121f" font-family="ui-monospace, monospace"></text>
+      </g>
+    </svg>
+
+    <div class="grid">
+      <div class="node" id="n-client" style="grid-area:client">
+        <div class="tag">Client</div>
+        <h3>Ứng dụng của bạn</h3>
+        <p>OpenAI SDK, Cline, Continue… gửi request chuẩn OpenAI.</p>
+      </div>
+
+      <div class="node" id="n-server" style="grid-area:server">
+        <div class="tag">muse2api</div>
+        <h3>Server FastAPI</h3>
+        <p>Nhận request, chọn tài khoản, điều khiển trình duyệt.</p>
+      </div>
+
+      <div class="node" id="n-pool" style="grid-area:pool">
+        <div class="tag">Bể tài khoản</div>
+        <h3>Cookie đã lưu</h3>
+        <div class="cookie-card">hatch_sess · hatch_gw<br>hatch_vml · native_auth</div>
+        <p>accounts.json — mỗi mục là một phiên đăng nhập.</p>
+      </div>
+
+      <div class="node" id="n-browser" style="grid-area:browser">
+        <div class="tag">Chromium headless</div>
+        <h3>Trình duyệt do server điều khiển</h3>
+        <p>Không có cửa sổ. Vẫn tải trang, chạy JS, giữ cookie.</p>
+        <div class="browser">
+          <div class="bar"><i></i><i></i><i></i><span class="url" id="mock-url">https://muse.ai/</span></div>
+          <div class="chat">
+            <div class="bubble user" id="mock-user">vẽ một con mèo dễ thương</div>
+            <div class="bubble ai" id="mock-ai">Đã tạo ảnh ✓</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="node" id="n-muse" style="grid-area:muse">
+        <div class="tag">muse.ai</div>
+        <h3>Server thật</h3>
+        <p>Kiểm tra cookie, xử lý prompt, trả tin nhắn hoặc media.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="narration" aria-live="polite">
+    <div class="nrow">
+      <span class="count" id="count">Bước 1 / 8</span>
+      <div class="dots" id="dots"></div>
+    </div>
+    <h2 id="title"></h2>
+    <p id="text"></p>
+    <pre id="code"></pre>
+    <div class="controls">
+      <button id="play" class="primary" type="button">Tạm dừng</button>
+      <button id="prev" type="button">Bước trước</button>
+      <button id="next" type="button">Bước sau</button>
+      <button id="restart" type="button">Chạy lại</button>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+  </div>
+
+  <div class="callout">
+    <p><b>Điểm mấu chốt:</b> muse.ai không kiểm tra bạn là người hay máy. Nó kiểm tra cookie. Cookie còn hạn thì phiên còn hợp lệ — bất kể request đến từ cú nhấp chuột hay từ một script điều khiển trình duyệt.</p>
+  </div>
+
+  <h2 class="section-title">Bốn điều giải thích toàn bộ cơ chế</h2>
+  <p class="section-sub">Không cần biết sâu về mạng máy tính, chỉ cần hiểu bốn ý này.</p>
+
+  <div class="why">
+    <div class="card">
+      <h3>1. Cookie là vé vào cửa</h3>
+      <p>Sau khi bạn đăng nhập muse.ai, server cấp cho trình duyệt một chiếc vé (cookie). Từ đó, mỗi request tới muse.ai đều tự đính kèm vé. Không cần gửi lại mật khẩu.</p>
+    </div>
+    <div class="card">
+      <h3>2. Server không thấy ai bấm</h3>
+      <p>Hai request giống hệt nhau nếu cùng cookie và header. Một cái do bạn bấm nút, một cái do script tạo ra — server muse.ai không phân biệt được.</p>
+    </div>
+    <div class="card">
+      <h3>3. Phải là trình duyệt thật</h3>
+      <p>muse.ai có kiểm tra chống bot, ký request, và kết quả chỉ tồn tại trong DOM. Gửi HTTP trần từ Python thường bị chặn hoặc thiếu dữ liệu. Chromium thật làm đúng mọi bước như người dùng.</p>
+    </div>
+    <div class="card">
+      <h3>4. Vé này là chìa khóa</h3>
+      <p>Trong thời gian còn hạn, cookie tương đương quyền truy cập tài khoản. Cookie cốt lõi là <code>httpOnly</code> — JavaScript trong trang không đọc được, nên extension phải xin quyền <code>cookies</code>. Không chia sẻ cookie cho ai.</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">Chromium headless là gì?</h2>
+  <p class="section-sub">Bạn đã quen với Chrome có cửa sổ. Đây là người anh em chạy ngầm của nó — và là thứ thực sự gọi muse.ai thay bạn.</p>
+
+  <div class="why">
+    <div class="card">
+      <h3>1. Chrome và Chromium là anh em</h3>
+      <p>Chrome của Google được xây trên nhân mã nguồn mở Chromium. Khả năng tải trang, chạy JavaScript, giữ cookie và dựng DOM gần như giống nhau. Khác biệt chủ yếu là thương hiệu, dịch vụ đồng bộ và vài codec độc quyền. Dự án gọi tên nhân này là Chromium; nếu máy không có Chromium, <code>config.py</code> tự dò Chrome hoặc Edge.</p>
+    </div>
+    <div class="card">
+      <h3>2. Headless = không có cửa sổ</h3>
+      <p>Chrome thường mở cửa sổ để bạn nhìn và bấm. Headless vẫn tải trang, chạy JavaScript, giữ cookie và dựng DOM — chỉ không vẽ giao diện ra màn hình. Không ai cần nhìn cửa sổ đó, nên bỏ phần vẽ giúp nhẹ hơn và chạy được trên server không có màn hình.</p>
+    </div>
+    <div class="card">
+      <h3>3. Vì sao dự án bắt buộc dùng</h3>
+      <p>Ở bước 4, chỉ trình duyệt thật mới tự gắn cookie <code>httpOnly</code> vào request, chạy mã JavaScript của muse.ai, ký request và giữ blob ảnh/video. Gửi HTTP trần từ Python không làm được những việc này. Headless chính là "người dùng vô hình" đứng sau API.</p>
+    </div>
+    <div class="card">
+      <h3>4. Server điều khiển nó thế nào</h3>
+      <p>Không bấm chuột bằng tay. Server nói chuyện với trình duyệt qua Chrome DevTools Protocol (CDP) trên cổng <code>19210</code>: tạo browser context riêng, nạp cookie, gõ prompt, đọc DOM. Đây cũng là giao thức bạn thấy khi nhấn F12.</p>
+    </div>
+  </div>
+
+  <pre class="snippet">chromium --headless=new
+  --remote-debugging-port=19210
+  --user-data-dir=… about:blank</pre>
+  <p class="hint">Lệnh thật nằm trong <code>engine.py:92</code>. Không có cửa sổ nào hiện ra, nhưng bên trong vẫn là một trình duyệt đầy đủ: cùng engine Blink, cùng V8, cùng cookie jar.</p>
+
+  <h2 class="section-title">Các kỹ thuật chính</h2>
+  <p class="section-sub">Lấy cookie ở đâu, vì sao cookie thay được API key, và server làm gì phía sau.</p>
+
+  <div class="split">
+    <div class="card">
+      <h3>Lấy cookie bằng ba cách</h3>
+      <p>Bốn cookie cốt lõi là <code>httpOnly</code>: JavaScript trong trang muse.ai không đọc được, nên không copy bằng console. Ba đường hợp lệ:</p>
+      <ol class="steps">
+        <li><b>Extension Chrome/Edge.</b> Xin quyền <code>cookies</code>, đọc bằng <code>chrome.cookies.getAll({domain:'muse.ai'})</code>, rồi POST về <code>/admin/accounts</code>. Mã nằm trong thư mục <code>extension/</code>.</li>
+        <li><b>Userscript Tampermonkey.</b> Dùng <code>GM_cookie.list</code> — cùng mục đích, chạy ngay trên trang muse.ai. Tệp <code>tools/muse2api_cookie_importer.user.js</code>.</li>
+        <li><b>Thủ công.</b> F12 → Application → Cookies → copy <code>hatch_sess</code>, <code>hatch_gw</code>, <code>hatch_vml</code>, <code>hatch_native_auth_device</code>, rồi dán vào trang quản trị.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>Vì sao cookie thay được API key</h3>
+      <p>muse.ai không phát API key cho người dùng. Thứ nó dùng để nhận diện phiên chính là cookie. Vì vậy dự án có hai lớp khóa:</p>
+      <div class="diagram">
+        <div class="dbox">Ứng dụng của bạn</div>
+        <div class="dlink"><span>API Key <code>m2a_…</code></span></div>
+        <div class="dbox accent">muse2api</div>
+        <div class="dlink"><span>Cookie <code>hatch_sess…</code></span></div>
+        <div class="dbox">muse.ai</div>
+      </div>
+      <p>Lớp thứ nhất bảo vệ server của bạn. Lớp thứ hai là vé thật để muse.ai chấp nhận request. Cookie hết hạn thì phiên chết, dù API key vẫn đúng.</p>
+    </div>
+  </div>
+
+  <div class="why">
+    <div class="card">
+      <h3>Điều khiển trình duyệt</h3>
+      <p>Server không bấm chuột. Nó gửi lệnh CDP: mở browser context riêng, nạp cookie, tìm ô nhập, đổ chữ bằng <code>Input.insertText</code>, kích nút gửi, rồi chờ DOM có câu trả lời. Khi client xin stream, server đọc dần DOM và gửi SSE để chữ hiện dần.</p>
+    </div>
+    <div class="card">
+      <h3>Hàng đợi tác vụ</h3>
+      <p>Ảnh và video mất hàng chục giây đến vài phút. Request tạo task trả <code>id</code> ngay; worker chạy nền, ghi tiến độ vào <code>data/tasks.json</code>. Client hỏi <code>/v1/images/tasks</code> hoặc <code>/v1/videos</code> cho đến khi xong, rồi tải file qua <code>/v1/media/{name}</code>.</p>
+    </div>
+    <div class="card">
+      <h3>Giữ phiên sống</h3>
+      <p>Mỗi 15 phút, vòng nền gọi <code>renew_session_http</code> cho từng tài khoản để làm mới cookie và đánh thức phiên. Tài khoản lỗi bị đánh dấu, không được chọn cho tác vụ mới. Đặt <code>MUSE2API_KEEPALIVE_DISABLED_ACCOUNTS=1</code> để giữ sống cả tài khoản đang bị khóa.</p>
+    </div>
+    <div class="card">
+      <h3>Chia việc giữa nhiều tài khoản</h3>
+      <p>Bể tài khoản chọn tài khoản rảnh theo vòng và khóa nó trong lúc chạy. <code>MUSE2API_CONCURRENCY</code> giới hạn số tác vụ song song. Hết tài khoản rảnh, request phải chờ, và có thể nhận lỗi <code>Hết thời gian chờ tài khoản rảnh; hiện tất cả tài khoản đều bận</code>.</p>
+    </div>
+  </div>
+
+  <h2 class="section-title">Điều dự án không làm</h2>
+  <p class="section-sub">Ranh giới quan trọng, để hiểu đúng bản chất.</p>
+  <ul class="nots">
+    <li>Không lấy hay giải mã mật khẩu muse.ai.</li>
+    <li>Không vượt giới hạn gói dịch vụ; dùng đúng quota của tài khoản bạn nhập.</li>
+    <li>Không giả mạo người khác; cookie do chính bạn đăng nhập và tự nguyện nhập vào.</li>
+    <li>Tự động hóa có thể vi phạm điều khoản sử dụng của muse.ai. Bạn tự chịu trách nhiệm khi dùng.</li>
+  </ul>
+
+  <footer>Tệp tĩnh, không gọi mạng. Mở trực tiếp bằng trình duyệt.</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var NS = 'http://www.w3.org/2000/svg';
+  var stage = $('#stage');
+  var svg = $('#wires');
+  var packet = $('#packet');
+  var packetLabel = $('#packet-label');
+  var packetBg = packet.querySelector('rect');
+  var REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var nodes = {
+    client: $('#n-client'),
+    server: $('#n-server'),
+    pool: $('#n-pool'),
+    browser: $('#n-browser'),
+    muse: $('#n-muse')
+  };
+
+  var WIRES = [
+    ['client', 'server'],
+    ['server', 'pool'],
+    ['server', 'browser'],
+    ['browser', 'muse']
+  ];
+
+  var paths = WIRES.map(function () {
+    var p = document.createElementNS(NS, 'path');
+    p.setAttribute('class', 'wire');
+    svg.appendChild(p);
+    return p;
+  });
+
+  var steps = [
+    {
+      title: 'Ứng dụng của bạn gọi muse2api',
+      text: 'OpenAI SDK hoặc bất kỳ client nào gửi request đúng chuẩn OpenAI. Khác biệt duy nhất: địa chỉ trỏ về muse2api và có thêm API Key của bạn.',
+      code: 'POST /v1/chat/completions\nAuthorization: Bearer m2a_…\n\n{"model":"muse-image","messages":[…]}',
+      nodes: ['client', 'server'],
+      wire: 0, dir: 1, packet: 'HTTP', color: '#38bdf8'
+    },
+    {
+      title: 'muse2api chọn một tài khoản rảnh',
+      text: 'Bể tài khoản giữ nhiều phiên muse.ai. Server lấy một bộ cookie đang rảnh và khóa lại, để hai request không dùng chung một phiên cùng lúc.',
+      code: 'data/accounts.json\n{\n  "cookies": {\n    "hatch_sess": "…",\n    "hatch_gw": "…"\n  }\n}',
+      nodes: ['server', 'pool'],
+      wire: 1, dir: 1, packet: 'chọn', color: '#a78bfa'
+    },
+    {
+      title: 'Bơm cookie vào trình duyệt thật',
+      text: 'Server mở Chromium headless — trình duyệt chạy không có cửa sổ — tạo một browser context riêng, xóa cookie cũ rồi nạp đúng bộ cookie của tài khoản vừa chọn. Với muse.ai, trình duyệt này chính là người đã đăng nhập.',
+      code: 'Network.clearBrowserCookies\nNetwork.setCookie  hatch_sess=…\nNetwork.setCookie  hatch_gw=…\nNetwork.setCookie  hatch_vml=…',
+      nodes: ['server', 'browser'],
+      wire: 2, dir: 1, packet: 'cookie', color: '#fbbf24'
+    },
+    {
+      title: 'Trình duyệt mở muse.ai — cookie tự gắn vào request',
+      text: 'Đây là mấu chốt. Trình duyệt tự thêm header Cookie vào mọi request gửi tới muse.ai. Server muse.ai chỉ kiểm tra vé còn hợp lệ hay không, không biết ai đang điều khiển trình duyệt.',
+      code: 'GET https://muse.ai/\nCookie: hatch_sess=…; hatch_gw=…; hatch_vml=…\n\n→ 200 OK   (phiên hợp lệ)',
+      nodes: ['browser', 'muse'],
+      wire: 3, dir: 1, packet: 'HTTPS', color: '#38bdf8'
+    },
+    {
+      title: 'Tự động gõ prompt và bấm gửi',
+      text: 'Engine tìm ô nhập trên trang, đổ nội dung prompt vào rồi kích nút gửi. Không có API nào được gọi — chỉ là thao tác trên giao diện, giống hệt người dùng.',
+      code: 'Input.insertText  "vẽ một con mèo dễ thương"\n→ click nút Gửi',
+      nodes: ['browser'],
+      wire: -1, dir: 1, packet: '', color: '#38bdf8'
+    },
+    {
+      title: 'muse.ai xử lý và trả kết quả về trang',
+      text: 'Câu trả lời hoặc ảnh/video hiện ra trong DOM. Engine chờ phần tử ổn định, đọc chữ của trợ lý, hoặc lấy byte ảnh từ blob ngay trong trang.',
+      code: 'chờ [data-testid^="hatch-chat-attachment-…"]\nđọc text / blob  →  dữ liệu kết quả',
+      nodes: ['muse', 'browser'],
+      wire: 3, dir: -1, packet: 'reply', color: '#34d399'
+    },
+    {
+      title: 'Đọc kết quả, đóng gói lại',
+      text: 'Server nhận văn bản hoặc byte từ trình duyệt, rồi chuyển thành JSON đúng chuẩn OpenAI. Nếu client yêu cầu stream, nó cắt nhỏ và gửi dần bằng SSE.',
+      code: '{"choices":[{"message":{"role":"assistant",\n  "content":"…"}}]}\n\nhoặc  data: {"choices":[{"delta":…}]}',
+      nodes: ['browser', 'server'],
+      wire: 2, dir: -1, packet: 'DOM', color: '#a78bfa'
+    },
+    {
+      title: 'Client nhận phản hồi y như OpenAI',
+      text: 'Ứng dụng của bạn không cần biết bên dưới là trình duyệt. Nó thấy đúng cấu trúc quen thuộc: choices, message, tool_calls, hoặc URL media. Vòng lặp khép kín.',
+      code: '200 OK\nContent-Type: application/json\n\n{"choices":[…],"usage":{…}}',
+      nodes: ['server', 'client'],
+      wire: 0, dir: -1, packet: 'JSON', color: '#34d399'
+    }
+  ];
+
+  var state = { i: 0, playing: false, timer: null };
+  var hideTimer = 0;
+  var dots = [];
+  var dotsBox = $('#dots');
+
+  steps.forEach(function (s, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Bước ' + (i + 1));
+    b.addEventListener('click', function () { showStep(i); });
+    dotsBox.appendChild(b);
+    dots.push(b);
+  });
+
+  function geom(el) {
+    var r = el.getBoundingClientRect();
+    var s = stage.getBoundingClientRect();
+    return {
+      cx: r.left - s.left + r.width / 2,
+      cy: r.top - s.top + r.height / 2,
+      w: r.width,
+      h: r.height
+    };
+  }
+
+  function edgePoint(g, tx, ty) {
+    var dx = tx - g.cx;
+    var dy = ty - g.cy;
+    if (!dx && !dy) return { x: g.cx, y: g.cy };
+    var kx = dx ? (g.w / 2) / Math.abs(dx) : Infinity;
+    var ky = dy ? (g.h / 2) / Math.abs(dy) : Infinity;
+    var k = Math.min(kx, ky);
+    return { x: g.cx + dx * k, y: g.cy + dy * k };
+  }
+
+  function layout() {
+    var s = stage.getBoundingClientRect();
+    svg.setAttribute('viewBox', '0 0 ' + s.width + ' ' + s.height);
+    var g = {};
+    Object.keys(nodes).forEach(function (k) { g[k] = geom(nodes[k]); });
+    WIRES.forEach(function (pair, i) {
+      var a = g[pair[0]];
+      var b = g[pair[1]];
+      var p1 = edgePoint(a, b.cx, b.cy);
+      var p2 = edgePoint(b, a.cx, a.cy);
+      paths[i].setAttribute('d', 'M ' + p1.x + ' ' + p1.y + ' L ' + p2.x + ' ' + p2.y);
+    });
+  }
+
+  function movePacket(wireIndex, dir, label, color) {
+    var path = paths[wireIndex];
+    if (!path || REDUCE) { packet.style.opacity = 0; return; }
+    var len = path.getTotalLength();
+    var pad = Math.min(30, len / 2);
+    var from = dir > 0 ? pad : len - pad;
+    var to = dir > 0 ? len - pad : pad;
+    var a = path.getPointAtLength(from);
+    var b = path.getPointAtLength(to);
+
+    packetLabel.textContent = label || '';
+    packetBg.setAttribute('fill', color || '#38bdf8');
+
+    packet.style.transition = 'none';
+    packet.style.transform = 'translate(' + a.x + 'px,' + a.y + 'px)';
+    packet.style.opacity = '1';
+    void packet.getBoundingClientRect();
+
+    var dur = Math.max(650, Math.min(1400, (len - 2 * pad) * 12));
+    packet.style.transition = 'transform ' + dur + 'ms linear, opacity 220ms linear';
+    packet.style.transform = 'translate(' + b.x + 'px,' + b.y + 'px)';
+
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () { packet.style.opacity = '0'; }, dur + 120);
+  }
+
+  function setBubbles(i) {
+    $('#mock-url').classList.toggle('ok', i >= 3);
+    $('#mock-user').classList.toggle('show', i >= 4);
+    $('#mock-ai').classList.toggle('show', i >= 5);
+  }
+
+  function showStep(i) {
+    state.i = ((i % steps.length) + steps.length) % steps.length;
+    var s = steps[state.i];
+
+    Object.keys(nodes).forEach(function (key) {
+      nodes[key].classList.toggle('active', s.nodes.indexOf(key) !== -1);
+    });
+
+    paths.forEach(function (p, wi) {
+      p.classList.toggle('active', wi === s.wire);
+      p.classList.toggle('dim', s.wire !== -1 && wi !== s.wire);
+    });
+
+    $('#count').textContent = 'Bước ' + (state.i + 1) + ' / ' + steps.length;
+    $('#title').textContent = s.title;
+    $('#text').textContent = s.text;
+    $('#code').textContent = s.code;
+    $('#bar').style.width = (((state.i + 1) / steps.length) * 100) + '%';
+    setBubbles(state.i);
+
+    dots.forEach(function (d, di) {
+      d.classList.toggle('on', di === state.i);
+    });
+
+    if (s.wire >= 0) {
+      var captured = state.i;
+      setTimeout(function () {
+        if (state.i === captured) movePacket(s.wire, s.dir, s.packet, s.color);
+      }, 180);
+    } else {
+      clearTimeout(hideTimer);
+      packet.style.opacity = 0;
+    }
+  }
+
+  function tick() {
+    showStep(state.i + 1);
+  }
+
+  function play() {
+    if (state.playing) return;
+    state.playing = true;
+    $('#play').textContent = 'Tạm dừng';
+    if (!state.timer) {
+      state.timer = setInterval(tick, 4600);
+    }
+  }
+
+  function pause() {
+    state.playing = false;
+    $('#play').textContent = 'Phát';
+    clearInterval(state.timer);
+    state.timer = null;
+  }
+
+  $('#play').addEventListener('click', function () {
+    if (state.playing) pause(); else play();
+  });
+
+  $('#prev').addEventListener('click', function () { showStep(state.i - 1); });
+  $('#next').addEventListener('click', function () { showStep(state.i + 1); });
+
+  $('#restart').addEventListener('click', function () {
+    pause();
+    showStep(0);
+    play();
+  });
+
+  window.addEventListener('resize', layout);
+  if (window.ResizeObserver) {
+    new ResizeObserver(layout).observe(stage);
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(layout);
+  }
+
+  var qs = new URLSearchParams(location.search);
+  var startAt = parseInt(qs.get('step') || '1', 10);
+  if (isNaN(startAt)) startAt = 1;
+
+  showStep(startAt - 1);
+  layout();
+  if (!REDUCE && !qs.has('step')) {
+    play();
+  } else {
+    $('#play').textContent = 'Phát';
+    pause();
+  }
+})();
+</script>
+</body>
+</html>
