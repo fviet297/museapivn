@@ -2181,10 +2181,43 @@ def _git(args: list[str], timeout: int = 30):
     )
 
 
+UPSTREAM_REF = "refs/remotes/upstream/main"
+
+
+def _upstream_fetch_url(token: str = "") -> str:
+    return f"https://x-access-token:{token}@github.com/czg86389-hub/muse2api.git" if token else f"{REPO_URL}.git"
+
+
+def _git_error(res) -> str:
+    return (res.stderr or res.stdout or "").strip()[:300]
+
+
+def _is_in_local_history(sha: str) -> bool:
+    """Commit upstream đã nằm trong nhánh hiện tại (vd. bản fork Việt hoá dựng trên nó) thì không tính là bản mới."""
+    return _git(["merge-base", "--is-ancestor", sha, "HEAD"]).returncode == 0
+
+
+def _merge_upstream(fetch_url: str) -> None:
+    """Gộp upstream vào nhánh hiện tại thay vì ghi đè, để giữ thay đổi cục bộ (bản dịch, script...).
+    Xung đột thì huỷ merge, giữ nguyên code đang chạy."""
+    f_res = _git(["fetch", fetch_url, f"+main:{UPSTREAM_REF}"], timeout=45)
+    if f_res.returncode != 0:
+        raise HTTPException(502, f"Tải bản cập nhật từ GitHub thất bại: {_git_error(f_res)}")
+    has_identity = bool(_git(["config", "user.email"]).stdout.strip())
+    identity = [] if has_identity else ["-c", "user.name=muse2api-updater", "-c", "user.email=muse2api-updater@localhost"]
+    m_res = _git([*identity, "merge", "--no-edit", UPSTREAM_REF])
+    if m_res.returncode == 0:
+        return
+    conflicts = _git(["diff", "--name-only", "--diff-filter=U"]).stdout.split()
+    _git(["merge", "--abort"])
+    detail = f"xung đột ở: {', '.join(conflicts)}" if conflicts else _git_error(m_res)
+    raise HTTPException(409, f"Không gộp được bản cập nhật, đã giữ nguyên code hiện tại ({detail}). Cần gộp thủ công: git merge upstream/main")
+
+
 def _ensure_git_repo(token: str = ""):
     """确保 BASE_DIR 已初始化为绑定 czg86389-hub/muse2api 的 Git 仓库。"""
     git_dir = os.path.join(BASE_DIR, ".git")
-    remote_url = f"https://x-access-token:{token}@github.com/czg86389-hub/muse2api.git" if token else f"{REPO_URL}.git"
+    remote_url = _upstream_fetch_url(token)
     if not os.path.isdir(git_dir):
         _git(["init", "-b", "main"])
         _git(["remote", "add", "origin", remote_url])
@@ -2294,7 +2327,7 @@ def _check_update_sync(force: bool = False) -> dict:
 
     has_update = False
     if remote_sha and local_sha:
-        has_update = (remote_sha != local_sha)
+        has_update = remote_sha != local_sha and not (has_git and _is_in_local_history(remote_sha))
     elif remote_version and local_version:
         has_update = _parse_v(remote_version) > _parse_v(local_version)
 
@@ -2321,11 +2354,38 @@ def _check_update_sync(force: bool = False) -> dict:
 
 
 def _upgrade_from_github_sync() -> dict:
-    """从 GitHub 拉取最新代码覆盖核心文件（兼容 Git 与无 Git 的 Docker/ZIP 环境），绝不触碰 .env 与 data/。"""
+    """有 .git：gộp upstream vào nhánh hiện tại; không có .git (Docker/ZIP)：ghi đè file lõi. Không đụng .env và data/."""
+    token = _read_env_key("GITHUB_TOKEN")
+    if os.path.isdir(os.path.join(BASE_DIR, ".git")):
+        _merge_upstream(_upstream_fetch_url(token))
+        upgraded_via = "git-merge"
+    else:
+        upgraded_via = _overwrite_from_upstream(token)
+
+    _UPDATE_CACHE["ts"] = 0.0
+    status = _check_update_sync(force=True)
+    if status.get("remote_sha"):
+        try:
+            with open(_installed_sha_file(), "w", encoding="utf-8") as f:
+                f.write(status["remote_sha"])
+            status["local_sha"] = status["remote_sha"]
+            status["has_update"] = False
+            status["up_to_date"] = True
+        except OSError:
+            pass
+    return {
+        "ok": True,
+        "via": upgraded_via,
+        "message": f"Đã cập nhật thành công lên phiên bản mới nhất {status.get('remote_version')} ({status.get('remote_sha')})",
+        "status": status,
+    }
+
+
+def _overwrite_from_upstream(token: str) -> str:
+    """从 GitHub 拉取最新代码覆盖核心文件（无 Git 的 Docker/ZIP 环境），绝不触碰 .env 与 data/。"""
     import requests
     import tarfile
 
-    token = _read_env_key("GITHUB_TOKEN")
     upgraded_via = ""
     try:
         _ensure_git_repo(token)
@@ -2363,24 +2423,7 @@ def _upgrade_from_github_sync() -> dict:
                         with open(target_path, "wb") as out_f:
                             out_f.write(fobj.read())
         upgraded_via = "tarball"
-
-    _UPDATE_CACHE["ts"] = 0.0
-    status = _check_update_sync(force=True)
-    if status.get("remote_sha"):
-        try:
-            with open(_installed_sha_file(), "w", encoding="utf-8") as f:
-                f.write(status["remote_sha"])
-            status["local_sha"] = status["remote_sha"]
-            status["has_update"] = False
-            status["up_to_date"] = True
-        except OSError:
-            pass
-    return {
-        "ok": True,
-        "via": upgraded_via,
-        "message": f"Đã cập nhật thành công lên phiên bản mới nhất {status.get('remote_version')} ({status.get('remote_sha')})",
-        "status": status,
-    }
+    return upgraded_via
 
 
 @app.get("/admin/update/check")
