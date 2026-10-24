@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Trợ lý nhập Cookie Muse2API
 // @namespace    https://github.com/czg86389-hub/muse2api
-// @version      1.1.0
+// @version      1.1.1
 // @description  Xuất và đẩy Cookie cốt lõi lên Bể tài khoản muse2api chỉ với một cú nhấp trên trang muse.ai, hỗ trợ bảng nổi hiện đại, chỉ báo trạng thái và sao lưu vào clipboard
 // @author       MUSE2API Contributors
 // @match        https://muse.ai/*
@@ -20,7 +20,7 @@
   'use strict';
 
   const STORE_KEY = '***';
-  const ESSENTIAL = ['hatch_sess', 'hatch_gw', 'hatch_vml'];
+  const ESSENTIAL = ['hatch_sess', 'hatch_vml'];
 
   function loadCfg() {
     const fallback = { base: '', key: '', label: '' };
@@ -73,6 +73,9 @@
           { domain: '.muse.ai' },
           { domain: 'muse.ai' },
         ];
+        if (typeof window !== 'undefined' && window.location && window.location.href) {
+          queries.unshift({ url: window.location.href });
+        }
         const all = [];
         for (const q of queries) {
           try {
@@ -250,7 +253,7 @@
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#38bdf8; box-shadow:0 0 10px #38bdf8;"></span>
             <b style="font-size:15px; color:#f1f5f9; letter-spacing:0.3px;">Bảng nhập muse2api</b>
-            <span style="font-size:11px; background:#1e293b; color:#94a3b8; padding:1px 6px; border-radius:6px;">v1.1</span>
+            <span style="font-size:11px; background:#1e293b; color:#94a3b8; padding:1px 6px; border-radius:6px;">v1.1.1</span>
           </div>
           <button id="muse-close-btn" style="background:transparent; border:none; color:#64748b; font-size:18px; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
         </div>
