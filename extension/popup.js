@@ -9,7 +9,8 @@
 const $ = (id) => document.getElementById(id);
 const STORE = 'muse2api_ext_cfg';
 
-const ESSENTIAL = ['hatch_sess', 'hatch_gw', 'hatch_vml', 'hatch_native_auth_device'];
+// 与后端 engine.ESSENTIAL_COOKIES 保持一致：hatch_gw 为网关路由缓存，非必需
+const ESSENTIAL = ['hatch_sess', 'hatch_vml', 'hatch_native_auth_device'];
 
 function log(html, cls) {
   const el = $('log');
