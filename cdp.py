@@ -38,7 +38,7 @@ class CDP:
                     if "error" in msg:
                         raise CDPError(f"{method}: {msg['error']}")
                     return msg
-            raise TimeoutError(f"CDP {method} 超时")
+            raise TimeoutError(f"CDP {method} hết thời gian chờ")
 
     def js(self, expr: str, await_promise: bool = False, timeout: float | None = None):
         r = self.send("Runtime.evaluate",

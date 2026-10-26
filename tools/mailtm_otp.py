@@ -53,7 +53,7 @@ CODE_RE = re.compile(r"(?<!\d)(\d{4,8})(?!\d)")
 def poll(token, timeout):
     """轮询新邮件，发现验证码就打印。返回验证码或 None。"""
     seen, deadline = set(), time.time() + timeout
-    print(f"[*] 开始轮询收件箱（最多 {timeout}s，Ctrl-C 可停）\n")
+    print(f"[*] Bắt đầu kiểm tra hộp thư (tối đa {timeout}s, Ctrl-C để dừng)\n")
     while time.time() < deadline:
         try:
             r = req("/messages?page=1", token=token)
@@ -68,17 +68,17 @@ def poll(token, timeout):
             frm = (full.get("from") or {}).get("address", "?")
             subj = full.get("subject", "")
             body = full.get("text") or full.get("intro") or ""
-            print(f"[+] 新邮件  来自 {frm}\n    主题：{subj}")
+            print(f"[+] Thư mới  từ {frm}\n    Tiêu đề: {subj}")
             codes = CODE_RE.findall(f"{subj}\n{body}")
-            print(f"    正文：{body.strip()[:500]}")
+            print(f"    Nội dung: {body.strip()[:500]}")
             if codes:
-                print(f"\n>>> 验证码：{codes[0]}\n")
+                print(f"\n>>> Mã xác minh: {codes[0]}\n")
                 return codes[0]
-            print("    （未识别到验证码，继续等待…）\n")
+            print("    (Không nhận ra mã xác minh, tiếp tục chờ…)\n")
         left = int(deadline - time.time())
-        print(f"    等待中… 剩余 {left}s", end="\r", flush=True)
+        print(f"    Đang chờ… còn {left}s", end="\r", flush=True)
         time.sleep(3)
-    print("\n[!] 超时，未收到验证码。")
+    print("\n[!] Hết thời gian, không nhận được mã xác minh.")
     return None
 
 
@@ -89,11 +89,11 @@ def main():
     a = ap.parse_args()
     if a.addr and a.pwd:
         addr, pwd, token = a.addr, a.pwd, login(a.addr, a.pwd)
-        print(f"[*] 复用已有地址：{addr}")
+        print(f"[*] Dùng lại địa chỉ có sẵn: {addr}")
     else:
         addr, pwd, token = new_account()
-        print(f"[*] 已申请新地址：{addr}\n    密码：{pwd}（复用需带上）")
-    print(f"\n=== 把下面这个地址填进 muse.ai 登录页 ===\n    {addr}\n")
+        print(f"[*] Đã tạo địa chỉ mới: {addr}\n    Mật khẩu: {pwd} (cần khi dùng lại)")
+    print(f"\n=== Điền địa chỉ dưới đây vào trang đăng nhập muse.ai ===\n    {addr}\n")
     code = poll(token, a.timeout)
     sys.exit(0 if code else 1)
 
@@ -102,4 +102,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[*] 已停止。")
+        print("\n[*] Đã dừng.")

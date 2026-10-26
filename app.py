@@ -494,33 +494,34 @@ class AccountPatch(BaseModel):
 def build_image_prompt(r: ImageRequest) -> str:
     has_ref = bool(r.reference_image or r.image or r.images)
     if has_ref:
-        parts = [f"基于我本次上传附带的参考图片进行生图/编辑：{r.prompt.strip()}"]
+        parts = [f"Tạo/chỉnh sửa ảnh dựa trên ảnh tham chiếu tôi vừa tải lên kèm tin nhắn này: {r.prompt.strip()}"]
     else:
-        parts = [f"全新文生图创作（当前未提供任何参考图，请勿查找历史相册或向用户索要原图，直接根据文字描述从零绘制生成一张全新图片）：{r.prompt.strip()}"]
+        parts = [f"Tạo ảnh mới hoàn toàn từ văn bản (hiện không có ảnh tham chiếu nào; đừng tìm trong album lịch sử hay hỏi xin ảnh gốc, hãy vẽ một ảnh hoàn toàn mới từ đầu theo mô tả): {r.prompt.strip()}"]
     ar = (r.aspect_ratio or "").strip().lower()
     sz = (r.size or "").strip().lower()
 
     if any(k in ar or k in sz for k in ("9:16", "9/16", "portrait", "竖屏", "720x1280", "1080x1920")):
-        parts.append("【画面构图与比例要求】：严格 9:16 竖屏满屏画幅（9:16 vertical portrait aspect ratio，高大于宽的手机全屏竖版画面），绝对不要生成横屏，保持垂直构图")
+        parts.append("[Yêu cầu bố cục và tỷ lệ khung hình]: bắt buộc khung dọc 9:16 phủ kín màn hình (9:16 vertical portrait aspect ratio, ảnh dọc toàn màn hình điện thoại, cao lớn hơn rộng), tuyệt đối không tạo ảnh ngang, giữ bố cục dọc")
     elif any(k in ar or k in sz for k in ("16:9", "16/9", "landscape", "横屏", "1280x720", "1920x1080")):
-        parts.append("【画面构图与比例要求】：16:9 宽屏横屏画幅（16:9 widescreen landscape aspect ratio）")
+        parts.append("[Yêu cầu bố cục và tỷ lệ khung hình]: khung ngang màn ảnh rộng 16:9 (16:9 widescreen landscape aspect ratio)")
     elif any(k in ar or k in sz for k in ("1:1", "square", "正方形", "1024x1024")):
-        parts.append("【画面构图与比例要求】：1:1 正方形画幅（1:1 square aspect ratio）")
+        parts.append("[Yêu cầu bố cục và tỷ lệ khung hình]: khung vuông 1:1 (1:1 square aspect ratio)")
     elif any(k in ar or k in sz for k in ("4:3", "4/3")):
-        parts.append("【画面构图与比例要求】：4:3 比例画幅")
+        parts.append("[Yêu cầu bố cục và tỷ lệ khung hình]: tỷ lệ khung 4:3")
     elif any(k in ar or k in sz for k in ("3:4", "3/4")):
-        parts.append("【画面构图与比例要求】：3:4 竖向画幅")
+        parts.append("[Yêu cầu bố cục và tỷ lệ khung hình]: khung dọc 3:4")
     elif r.aspect_ratio:
-        parts.append(f"【画面构图与比例要求】：{r.aspect_ratio} 画面比例")
+        parts.append(f"[Yêu cầu bố cục và tỷ lệ khung hình]: tỷ lệ khung hình {r.aspect_ratio}")
     elif r.size:
-        parts.append(f"尺寸/比例：{r.size}")
+        parts.append(f"Kích thước/tỷ lệ: {r.size}")
 
     if has_ref:
-        parts.append("【纯净画面要求】：彻底清除并去除参考图中的所有文字、水印、签名、角标及Logo标记（clean image without any watermark, text, or logo），输出绝对纯净无字画面")
+        parts.append("[Yêu cầu ảnh sạch]: xoá hoàn toàn mọi chữ, watermark, chữ ký, nhãn góc và logo có trong ảnh tham chiếu (clean image without any watermark, text, or logo), ảnh xuất ra phải sạch tuyệt đối, không có chữ")
+    parts.append("Nếu không thể tạo ảnh, hãy trả lời ngắn gọn lý do bằng tiếng Việt")
 
     if r.extra:
         parts.append(r.extra)
-    return "，".join(parts)
+    return ", ".join(parts)
 
 
 def _content_text(content) -> str:
@@ -537,7 +538,7 @@ def _content_text(content) -> str:
                 if t in (None, "text", "input_text", "output_text"):
                     parts.append(str(item.get("text") or ""))
                 elif t == "image_url":
-                    parts.append("[图片]")
+                    parts.append("[Ảnh]")
             elif isinstance(item, str):
                 parts.append(item)
         return "\n".join(p for p in parts if p)
@@ -558,12 +559,12 @@ def build_chat_prompt(messages: list[ChatMessage]) -> str:
         if role == "tool":
             # 工具执行结果 → 当成"用户提供的信息"发过去
             if text:
-                turns.append(("user", "【工具执行结果】\n" + text))
+                turns.append(("user", "[Kết quả thực thi công cụ]\n" + text))
             continue
         if not text:
             # 部分客户端的 assistant 消息只带 tool_calls、没有正文
             if role == "assistant" and m.tool_calls:
-                turns.append(("assistant", "【请求调用工具】" + json.dumps(
+                turns.append(("assistant", "[Yêu cầu gọi công cụ]" + json.dumps(
                     m.tool_calls, ensure_ascii=False)[:600]))
             continue
         if role in ("system", "developer"):
@@ -579,10 +580,10 @@ def build_chat_prompt(messages: list[ChatMessage]) -> str:
     if system:
         sys_text = "\n\n".join(system)
         sys_text = sys_text.replace("danger-full-access", "standard-workspace-access")
-        parts.append(f"背景与任务设定：\n{sys_text}")
+        parts.append(f"Bối cảnh và thiết lập nhiệm vụ:\n{sys_text}")
     for role, text in turns:
-        label = "助手" if role == "assistant" else "用户"
-        parts.append(f"{label}：\n{text}")
+        label = "Trợ lý" if role == "assistant" else "Người dùng"
+        parts.append(f"{label}:\n{text}")
     return "\n\n".join(parts)
 
 
@@ -594,32 +595,32 @@ def build_chat_prompt(messages: list[ChatMessage]) -> str:
 #
 # 注意：这是"尽力适配"而非保证 —— 目标模型是通用对话模型，没有针对
 # function calling 做微调，遵守协议的程度需要实测观察。
-_TOOL_PROTOCOL_HEAD = """你可以根据需要调用以下工具来协助用户完成任务。
-若需调用工具，请直接输出如下格式的 JSON 代码块（不要包含其他多余解释）：
+_TOOL_PROTOCOL_HEAD = """Bạn có thể gọi các công cụ dưới đây khi cần để giúp người dùng hoàn thành nhiệm vụ.
+Nếu cần gọi công cụ, hãy xuất trực tiếp một khối mã JSON theo định dạng sau (không kèm giải thích thừa):
 ```json
-{"name": "<工具名>", "arguments": {<参数>}}
+{"name": "<tên công cụ>", "arguments": {<tham số>}}
 ```
-如果需要调用多个工具，请输出包含多个对象的 JSON 数组。
-如果无需调用工具，请直接用自然语言回答。
+Nếu cần gọi nhiều công cụ, hãy xuất một mảng JSON chứa nhiều đối tượng.
+Nếu không cần gọi công cụ, hãy trả lời trực tiếp bằng ngôn ngữ tự nhiên.
 
-可用工具列表：
+Danh sách công cụ khả dụng:
 """
 
 
 def _describe_params(params) -> str:
     """把 JSON Schema 的参数描述成易读的多行文本。"""
     if not isinstance(params, dict):
-        return "      （无参数）"
+        return "      (không có tham số)"
     props = params.get("properties") or {}
     required = set(params.get("required") or [])
     if not props:
-        return "      （无参数）"
+        return "      (không có tham số)"
     lines = []
     for name, spec in props.items():
         spec = spec if isinstance(spec, dict) else {}
         lines.append("      - %s (%s, %s)%s" % (
             name, spec.get("type") or "any",
-            "必填" if name in required else "可选",
+            "bắt buộc" if name in required else "tuỳ chọn",
             (" " + spec["description"]) if spec.get("description") else ""))
     return "\n".join(lines)
 
@@ -640,7 +641,7 @@ def build_tools_prompt(tools: list | None) -> str:
         if not fn.get("name"):
             continue
         desc = fn.get("description") or ""
-        items.append("%d. %s%s\n   参数：\n%s" % (
+        items.append("%d. %s%s\n   Tham số:\n%s" % (
             len(items) + 1, fn["name"], (" — " + desc) if desc else "",
             _describe_params(fn.get("parameters"))))
     if not items:
@@ -729,25 +730,26 @@ def build_video_prompt(r: VideoRequest) -> str:
     parts = []
     if is_vertical:
         if has_ref:
-            parts.append(f"基于我本次上传的参考图片附件作为第一帧参考图（严禁使用历史图片或任何其他图像，必须严格以我当前刚刚上传并附带在此处的这张图片为起始帧）：生成一个严格9:16竖屏手机满屏的动态图生视频（9:16 vertical portrait video，720x1280，高大于宽的手机全屏竖版画面，严格以附带的参考图为起始第一帧延续动作，严禁生成横屏或黑边，时长严格为 {dur} 秒）：{user_prompt}")
+            parts.append(f"Dùng ảnh tham chiếu tôi vừa tải lên kèm tin nhắn này làm khung hình đầu tiên (nghiêm cấm dùng ảnh lịch sử hay bất kỳ ảnh nào khác, bắt buộc lấy đúng ảnh vừa đính kèm ở đây làm khung mở đầu): tạo một video động từ ảnh, khung dọc 9:16 phủ kín màn hình điện thoại (9:16 vertical portrait video, 720x1280, cao lớn hơn rộng, bắt buộc lấy ảnh tham chiếu đính kèm làm khung đầu rồi tiếp diễn chuyển động, nghiêm cấm tạo video ngang hay có viền đen, thời lượng đúng {dur} giây): {user_prompt}")
         else:
-            parts.append(f"全新文生视频创作（纯文本全新生成，严禁参考任何历史图片或上下文）：生成一个严格9:16竖屏手机满屏视频（9:16 vertical portrait video，720x1280，高大于宽的手机全屏竖版画面，严禁生成横屏或带有左右黑边，保持垂直构图，时长严格为 {dur} 秒）：{user_prompt}")
+            parts.append(f"Tạo video mới hoàn toàn từ văn bản (chỉ dựa trên chữ, nghiêm cấm tham chiếu bất kỳ ảnh lịch sử hay ngữ cảnh nào): tạo một video khung dọc 9:16 phủ kín màn hình điện thoại (9:16 vertical portrait video, 720x1280, cao lớn hơn rộng, nghiêm cấm tạo video ngang hay có viền đen hai bên, giữ bố cục dọc, thời lượng đúng {dur} giây): {user_prompt}")
     elif any(k in ar or k in sz for k in ("16:9", "16/9", "landscape", "横屏", "1280x720", "1920x1080")):
         if has_ref:
-            parts.append(f"基于我本次上传的参考图片附件作为第一帧参考图（严禁使用历史图片或任何其他图像，必须严格以我当前刚刚上传并附带在此处的这张图片为起始帧）：生成一个16:9宽屏横屏图生视频（16:9 widescreen landscape video，严格以附带的参考图为起始第一帧延续动作，时长严格为 {dur} 秒）：{user_prompt}")
+            parts.append(f"Dùng ảnh tham chiếu tôi vừa tải lên kèm tin nhắn này làm khung hình đầu tiên (nghiêm cấm dùng ảnh lịch sử hay bất kỳ ảnh nào khác, bắt buộc lấy đúng ảnh vừa đính kèm ở đây làm khung mở đầu): tạo một video từ ảnh khung ngang màn ảnh rộng 16:9 (16:9 widescreen landscape video, bắt buộc lấy ảnh tham chiếu đính kèm làm khung đầu rồi tiếp diễn chuyển động, thời lượng đúng {dur} giây): {user_prompt}")
         else:
-            parts.append(f"全新文生视频创作（纯文本全新生成，严禁参考任何历史图片或上下文）：生成一个16:9横屏宽屏视频（16:9 widescreen landscape video，时长严格为 {dur} 秒）：{user_prompt}")
+            parts.append(f"Tạo video mới hoàn toàn từ văn bản (chỉ dựa trên chữ, nghiêm cấm tham chiếu bất kỳ ảnh lịch sử hay ngữ cảnh nào): tạo một video khung ngang màn ảnh rộng 16:9 (16:9 widescreen landscape video, thời lượng đúng {dur} giây): {user_prompt}")
     else:
         if has_ref:
-            parts.append(f"基于我本次上传的参考图片附件作为第一帧参考图（严禁使用历史图片或任何其他图像，必须严格以我当前刚刚上传并附带在此处的这张图片为起始帧）：生成动态图生视频（严格以附带的参考图为起始第一帧延续动作，时长严格为 {dur} 秒）：{user_prompt}")
+            parts.append(f"Dùng ảnh tham chiếu tôi vừa tải lên kèm tin nhắn này làm khung hình đầu tiên (nghiêm cấm dùng ảnh lịch sử hay bất kỳ ảnh nào khác, bắt buộc lấy đúng ảnh vừa đính kèm ở đây làm khung mở đầu): tạo video động từ ảnh (bắt buộc lấy ảnh tham chiếu đính kèm làm khung đầu rồi tiếp diễn chuyển động, thời lượng đúng {dur} giây): {user_prompt}")
         else:
-            parts.append(f"全新文生视频创作（纯文本全新生成，严禁参考任何历史图片或上下文）：生成一个视频（时长严格为 {dur} 秒）：{user_prompt}")
+            parts.append(f"Tạo video mới hoàn toàn từ văn bản (chỉ dựa trên chữ, nghiêm cấm tham chiếu bất kỳ ảnh lịch sử hay ngữ cảnh nào): tạo một video (thời lượng đúng {dur} giây): {user_prompt}")
 
     if r.resolution:
-        parts.append(f"画质规格：{r.resolution}")
+        parts.append(f"Chất lượng hình ảnh: {r.resolution}")
+    parts.append("Nếu không thể tạo video, hãy trả lời ngắn gọn lý do bằng tiếng Việt")
     if r.extra:
         parts.append(r.extra)
-    return "，".join(parts)
+    return ", ".join(parts)
 
 
 def media_url(name: str) -> str:
@@ -1140,7 +1142,7 @@ async def images_edits(request: Request, _=Depends(auth)):
             ref_image_data = body.get("reference_image") or body.get("image_url")
 
     if not prompt:
-        prompt = "参考此图片并进行生图创作"
+        prompt = "Tạo ảnh mới dựa trên ảnh tham chiếu này"
 
     req_obj = ImageRequest(
         prompt=prompt,
@@ -1446,10 +1448,10 @@ def _responses_messages(req: ResponsesRequest) -> list[ChatMessage]:
             elif itype == "input_text":
                 msgs.append(ChatMessage(role="user", content=item.get("text")))
             elif itype == "function_call_output":
-                msgs.append(ChatMessage(role="user", content="【工具执行结果】\n"
+                msgs.append(ChatMessage(role="user", content="[Kết quả thực thi công cụ]\n"
                                         + str(item.get("output") or "")))
             elif itype == "function_call":
-                msgs.append(ChatMessage(role="assistant", content="【请求调用工具】"
+                msgs.append(ChatMessage(role="assistant", content="[Yêu cầu gọi công cụ]"
                                         + str(item.get("name") or "")))
     return msgs
 

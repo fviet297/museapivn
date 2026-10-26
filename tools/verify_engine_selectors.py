@@ -31,7 +31,7 @@ def find_page_ws():
     for p in pages:
         if p.get("type") == "page" and "muse.ai" in (p.get("url") or ""):
             return p.get("webSocketDebuggerUrl"), p.get("url")
-    raise SystemExit("没找到 muse.ai 页面")
+    raise SystemExit("Không tìm thấy trang muse.ai")
 
 
 class FakeEngine:
@@ -65,7 +65,7 @@ def main():
                                     for k, v in a.items()}, ensure_ascii=False))
 
         # 2) 注入 + 两种确认判据
-        print("\n=== 注入 1x1 PNG ===")
+        print("\n=== Chèn ảnh PNG 1x1 ===")
         res = c.js(E.MuseEngine._attach_image.__doc__ and
                    "0" or "0")  # noop placeholder
         # 直接搬 engine 的注入 JS

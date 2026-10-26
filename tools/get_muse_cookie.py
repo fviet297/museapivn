@@ -91,11 +91,11 @@ class WS:
         while b"\r\n\r\n" not in buf:
             chunk = self.sock.recv(4096)
             if not chunk:
-                raise ConnectionError("WebSocket 握手被断开")
+                raise ConnectionError("Bắt tay WebSocket bị ngắt")
             buf += chunk
         status = buf.split(b"\r\n", 1)[0]
         if b" 101" not in status:
-            raise ConnectionError(f"WebSocket 握手失败: {status!r}")
+            raise ConnectionError(f"Bắt tay WebSocket thất bại: {status!r}")
         self._id = 0
 
     # --- 发送 ---
@@ -124,7 +124,7 @@ class WS:
         while len(out) < n:
             chunk = self.sock.recv(n - len(out))
             if not chunk:
-                raise ConnectionError("连接已关闭")
+                raise ConnectionError("Kết nối đã đóng")
             out += chunk
         return out
 
@@ -147,7 +147,7 @@ class WS:
             if opcode == 0x9:                       # ping -> pong
                 self._frame(0xA, data)
             elif opcode == 0x8:
-                raise ConnectionError("服务端关闭了连接")
+                raise ConnectionError("Máy chủ đã đóng kết nối")
             # 其它（pong / 二进制 / 分片）直接忽略
 
     def call(self, method: str, params: dict | None = None,
@@ -168,7 +168,7 @@ class WS:
                 if "error" in msg:
                     raise RuntimeError(f"{method}: {msg['error']}")
                 return msg.get("result", {})
-        raise TimeoutError(f"CDP {method} 超时")
+        raise TimeoutError(f"CDP {method} hết thời gian chờ")
 
     def close(self):
         try:
@@ -258,7 +258,7 @@ def wait_cdp(port: int, timeout: float = 30.0) -> str:
         except Exception as exc:                       # noqa: BLE001
             last = exc
             time.sleep(0.5)
-    raise RuntimeError(f"浏览器调试端口没起来（{port}）：{last}")
+    raise RuntimeError(f"Cổng gỡ lỗi của trình duyệt không mở được ({port}): {last}")
 
 
 # ---------------------------------------------------------------- 读 cookie
@@ -303,14 +303,14 @@ def upload(base: str, key: str, label: str, cookies: dict[str, dict]) -> dict:
             return json.load(r)
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
-        raise RuntimeError(f"上传失败 HTTP {e.code}: {detail}") from None
+        raise RuntimeError(f"Tải lên thất bại HTTP {e.code}: {detail}") from None
     except urllib.error.URLError as e:
-        raise RuntimeError(f"连不上 {base}：{e.reason}") from None
+        raise RuntimeError(f"Không kết nối được {base}: {e.reason}") from None
 
 
 def fmt_ts(ts: int) -> str:
     if ts <= 0:
-        return "会话级"
+        return "theo phiên"
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
 
 
@@ -318,41 +318,41 @@ def fmt_ts(ts: int) -> str:
 def main() -> int:
     init_console()
     ap = argparse.ArgumentParser(
-        description="把 muse.ai 的登录 cookie 一键导入 muse2api 账号池")
+        description="Nhập cookie đăng nhập muse.ai vào bể tài khoản muse2api chỉ với một lệnh")
     ap.add_argument("--base", default=os.environ.get("MUSE2API_BASE", ""),
-                    help="muse2api 地址，如 http://your-server-ip:18610")
+                    help="Địa chỉ muse2api, vd. http://your-server-ip:18610")
     ap.add_argument("--key", default=os.environ.get("MUSE2API_KEY", ""),
-                    help="API Key（m2a_ 开头）")
-    ap.add_argument("--label", default="", help="账号标签，如 acc-01")
+                    help="API Key (bắt đầu bằng m2a_)")
+    ap.add_argument("--label", default="", help="Nhãn tài khoản, vd. acc-01")
     ap.add_argument("--timeout", type=int, default=300,
-                    help="等待登录的最长秒数，默认 300")
+                    help="Số giây tối đa chờ đăng nhập, mặc định 300")
     ap.add_argument("--keep-open", action="store_true",
-                    help="上传成功后不关闭浏览器窗口")
+                    help="Không đóng cửa sổ trình duyệt sau khi tải lên thành công")
     ap.add_argument("--port", type=int, default=CDP_PORT,
-                    help=f"调试端口，默认 {CDP_PORT}")
-    ap.add_argument("--chrome", default="", help="手动指定浏览器可执行文件路径")
+                    help=f"Cổng gỡ lỗi, mặc định {CDP_PORT}")
+    ap.add_argument("--chrome", default="", help="Chỉ định thủ công đường dẫn file thực thi của trình duyệt")
     args = ap.parse_args()
 
     say("=" * 66)
-    say("  muse2api Cookie 助手")
+    say("  Trợ lý Cookie muse2api")
     say("=" * 66)
     say()
 
     if not args.base or not args.key:
-        say("✗ 缺少参数。请这样运行：")
-        say("    python get_muse_cookie.py --base https://你的域名 --key m2a_xxx")
+        say("✗ Thiếu tham số. Hãy chạy như sau:")
+        say("    python get_muse_cookie.py --base https://ten-mien-cua-ban --key m2a_xxx")
         say()
-        say("  （这两个值可以在 muse2api 管理页面的「接入信息」里复制）")
+        say("  (Hai giá trị này có thể sao chép ở mục «Thông tin kết nối» trong trang quản trị muse2api)")
         return 2
     if not args.label:
         args.label = "muse-" + time.strftime("%m%d-%H%M")
 
     chrome = args.chrome or find_chrome()
     if not chrome:
-        say("✗ 没找到 Chrome / Edge 浏览器。")
-        say("  请先安装 Chrome，或用 --chrome \"完整路径\" 手动指定。")
+        say("✗ Không tìm thấy trình duyệt Chrome / Edge.")
+        say("  Hãy cài Chrome trước, hoặc chỉ định thủ công bằng --chrome \"đường dẫn đầy đủ\".")
         return 3
-    say(f"浏览器：{chrome}")
+    say(f"Trình duyệt: {chrome}")
 
     profile = os.path.join(tempfile.gettempdir(), "muse2api-cookie-profile")
     shutil.rmtree(profile, ignore_errors=True)
@@ -371,7 +371,7 @@ def main() -> int:
         "--no-sandbox", "--disable-gpu",
         "--new-window", SITE,
     ]
-    say("正在打开一个独立的浏览器窗口（不会动你日常用的浏览器）…")
+    say("Đang mở một cửa sổ trình duyệt riêng (không đụng tới trình duyệt bạn dùng hằng ngày)…")
     proc = subprocess.Popen(args_cmd, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL)
 
@@ -381,15 +381,15 @@ def main() -> int:
             ws_url = wait_cdp(args.port, 30)
         except RuntimeError as exc:
             say(f"✗ {exc}")
-            say("  提示：如果浏览器已经开着，请先完全退出再试一次。")
-            say("  （日常 Chrome 在跑时，新窗口会被它接管，调试端口起不来。）")
+            say("  Gợi ý: nếu trình duyệt đang mở, hãy thoát hẳn rồi thử lại.")
+            say("  (Khi Chrome thường ngày đang chạy, cửa sổ mới bị nó tiếp quản nên cổng gỡ lỗi không mở được.)")
             return 4
         ws = WS(ws_url)
 
         say()
         say("┌" + "─" * 64 + "┐")
-        say("│  请在弹出的浏览器窗口里登录 muse.ai（用你平时的方式登录即可）  │")
-        say("│  登录成功、能看到聊天界面后，脚本会自动抓取，无需其它操作。    │")
+        say("│  " + "Hãy đăng nhập muse.ai trong cửa sổ trình duyệt vừa mở ra.".ljust(62) + "│")
+        say("│  " + "Thấy giao diện chat là script tự lấy cookie, không cần làm gì.".ljust(62) + "│")
         say("└" + "─" * 64 + "┘")
         say()
 
@@ -400,7 +400,7 @@ def main() -> int:
             try:
                 got = read_cookies(ws)
             except Exception as exc:                    # noqa: BLE001
-                say(f"  读取 cookie 出错，重试中…（{exc}）")
+                say(f"  Đọc cookie lỗi, đang thử lại… ({exc})")
                 time.sleep(2)
                 continue
 
@@ -412,47 +412,47 @@ def main() -> int:
             if now - last_note > 5:
                 last_note = now
                 left = int(deadline - now)
-                say(f"  等待登录… 已拿到 {len(have)}/{len(ESSENTIAL)} 条核心 cookie"
-                    f"（{', '.join(have) or '无'}）剩余 {left}s")
+                say(f"  Đang chờ đăng nhập… đã lấy {len(have)}/{len(ESSENTIAL)} cookie lõi"
+                    f" ({', '.join(have) or 'chưa có'}) còn {left}s")
             time.sleep(2)
         else:
             say()
-            say("✗ 等待超时，还没登录成功。")
-            say("  请重跑一次脚本，并在窗口里完成登录。")
+            say("✗ Hết thời gian chờ, vẫn chưa đăng nhập thành công.")
+            say("  Hãy chạy lại script và hoàn tất đăng nhập trong cửa sổ.")
             return 5
 
         say()
-        say("✓ 已拿到完整会话 cookie：")
+        say("✓ Đã lấy đủ cookie phiên:")
         say()
-        say(f"  {'cookie 名':<30}{'httpOnly':<10}{'有效期'}")
+        say(f"  {'Tên cookie':<30}{'httpOnly':<10}{'Hạn dùng'}")
         say("  " + "-" * 62)
         for name in ESSENTIAL:
             c = got.get(name, {})
-            say(f"  {name:<30}{('是' if c.get('httpOnly') else '否'):<10}"
+            say(f"  {name:<30}{('có' if c.get('httpOnly') else 'không'):<10}"
                 f"{fmt_ts(c.get('expires', -1))}")
         say()
 
-        say("正在上传到 muse2api…")
+        say("Đang tải lên muse2api…")
         try:
             r = upload(args.base, args.key, args.label, got)
         except RuntimeError as exc:
             say(f"✗ {exc}")
             say()
-            say("  cookie 已经抓到了，但上传失败。你可以手动复制下面这行，")
-            say("  粘贴到管理页面的「导入账号」输入框：")
+            say("  Đã lấy được cookie nhưng tải lên thất bại. Bạn có thể tự sao chép dòng dưới,")
+            say("  dán vào ô «Nhập tài khoản» trong trang quản trị:")
             say()
             say("  " + "; ".join(f"{k}={v['value']}" for k, v in got.items()))
             return 6
 
         say()
         say("=" * 66)
-        say(f"✓ 导入成功！账号标签：{r['added'][0]['label']}")
-        say(f"  账号 ID：{r['added'][0]['id']}")
-        say(f"  共 {r['added'][0]['cookie_count']} 条 cookie")
+        say(f"✓ Nhập thành công! Nhãn tài khoản: {r['added'][0]['label']}")
+        say(f"  ID tài khoản: {r['added'][0]['id']}")
+        say(f"  Tổng cộng {r['added'][0]['cookie_count']} cookie")
         if r.get("warning"):
             say(f"  ⚠ {r['warning']}")
         say()
-        say(f"  打开 {args.base.rstrip('/')}/ 就能在账号池里看到它。")
+        say(f"  Mở {args.base.rstrip('/')}/ để thấy tài khoản trong bể tài khoản.")
         say("=" * 66)
         return 0
 
@@ -472,5 +472,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except KeyboardInterrupt:
         say()
-        say("已取消。")
+        say("Đã huỷ.")
         sys.exit(130)
